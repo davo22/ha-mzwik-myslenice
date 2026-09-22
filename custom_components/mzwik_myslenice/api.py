@@ -84,7 +84,11 @@ class MzwikApiClient:
         self._context_id: int | None = None
 
     async def _post(self, path: str, payload: dict, *, allow_redirect: bool = False):
-        url = f"{BASE_URL}/{path}"
+        # Every authenticated data endpoint takes the account context as a URL
+        # query param (?contextId=<podmiotId>) in addition to the JSON body;
+        # omitting it makes the Spring backend return HTTP 400.
+        ctx = self._context_id if self._context_id is not None else -1
+        url = f"{BASE_URL}/{path}?contextId={ctx}"
         try:
             async with self._session.post(
                 url, json=payload, timeout=TIMEOUT, allow_redirects=allow_redirect
