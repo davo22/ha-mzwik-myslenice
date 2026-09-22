@@ -93,6 +93,8 @@ class MzwikApiClient:
                 if resp.status == 401:
                     raise MzwikAuthError("Not authenticated")
                 if resp.status != 200:
+                    body = (await resp.text())[:300]
+                    _LOGGER.debug("eBOK %s -> HTTP %s: %s", path, resp.status, body)
                     raise MzwikApiError(f"HTTP {resp.status} from {path}")
                 return await resp.json(content_type=None)
         except (aiohttp.ClientError, asyncio.TimeoutError) as err:
@@ -135,6 +137,9 @@ class MzwikApiClient:
         """List the account's active water meters."""
         if self._context_id is None:
             raise MzwikApiError("Not logged in")
+        # Full field set mirroring the portal's own request — the Spring backend
+        # binds several of these to Java primitives (booleans), so sending the
+        # complete payload avoids binding errors from omitted fields.
         data = await self._post(
             "zamont/findSimpleMyForWaterUse",
             {
@@ -142,10 +147,26 @@ class MzwikApiClient:
                 "contextPunktId": 0,
                 "activeOnly": True,
                 "hideMainMeters": False,
+                "numerPunktu": "",
+                "punktId": "",
+                "wspolnotaId": "",
+                "zamontIdForConnected": None,
+                "ownedByInvestorOnly": False,
+                "punktRozliczanyOnly": False,
+                "punktNierozliczanyOnly": False,
+                "podlicznikiOnly": False,
+                "mainOnly": False,
+                "lokalowy": False,
+                "ogrodowy": False,
+                "punktNadrzednyId": None,
+                "superiorOnly": False,
+                "zamontIdSprzezone": None,
                 "offset": None,
                 "limit": 100,
                 "orderBy": [],
                 "fieldCriterion": [],
+                "kodTypMiejscaZam": "",
+                "onlyRadioReading": False,
             },
         )
         meters: list[MzwikMeter] = []
