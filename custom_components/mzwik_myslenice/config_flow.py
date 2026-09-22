@@ -49,10 +49,11 @@ class MzwikConfigFlow(ConfigFlow, domain=DOMAIN):
                     user_input[CONF_USERNAME], user_input[CONF_PASSWORD]
                 )
                 self._meters = await client.async_get_meters()
-            except MzwikAuthError:
+            except MzwikAuthError as err:
+                _LOGGER.warning("MZWiK auth failed: %s", err)
                 errors["base"] = "invalid_auth"
-            except MzwikApiError:
-                _LOGGER.debug("eBOK login failed", exc_info=True)
+            except MzwikApiError as err:
+                _LOGGER.warning("MZWiK connection failed: %s", err)
                 errors["base"] = "cannot_connect"
             else:
                 await self.async_set_unique_id(user_input[CONF_USERNAME])

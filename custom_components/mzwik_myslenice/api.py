@@ -9,6 +9,7 @@ also submits it empty for logged-in flows).
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
 from dataclasses import dataclass
@@ -93,9 +94,8 @@ class MzwikApiClient:
                 if resp.status == 401:
                     raise MzwikAuthError("Not authenticated")
                 if resp.status != 200:
-                    body = (await resp.text())[:300]
-                    _LOGGER.debug("eBOK %s -> HTTP %s: %s", path, resp.status, body)
-                    raise MzwikApiError(f"HTTP {resp.status} from {path}")
+                    body = (await resp.text())[:200]
+                    raise MzwikApiError(f"HTTP {resp.status} from {path}: {body}")
                 return await resp.json(content_type=None)
         except (aiohttp.ClientError, asyncio.TimeoutError) as err:
             raise MzwikApiError(f"Cannot reach eBOK: {err}") from err
@@ -124,13 +124,21 @@ class MzwikApiClient:
             async with self._session.get(
                 f"{BASE_URL}/security/getEbokUserFromSession", timeout=TIMEOUT
             ) as resp:
-                data = await resp.json(content_type=None)
+                text = await resp.text()
+                if resp.status != 200:
+                    raise MzwikApiError(
+                        f"HTTP {resp.status} from getEbokUserFromSession: {text[:200]}"
+                    )
+                data = json.loads(text)
         except (aiohttp.ClientError, asyncio.TimeoutError) as err:
             raise MzwikApiError(f"Cannot reach eBOK: {err}") from err
+        except json.JSONDecodeError as err:
+            raise MzwikApiError(f"Bad session response: {err}") from err
 
         user = (data or {}).get("user")
         if not user or not user.get("podmiotId"):
-            raise MzwikAuthError("Login rejected")
+            info = (data or {}).get("info")
+            raise MzwikAuthError(f"Login rejected (info={info})")
         self._context_id = user["podmiotId"]
 
     async def async_get_meters(self) -> list[MzwikMeter]:
