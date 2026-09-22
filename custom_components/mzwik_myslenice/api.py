@@ -99,11 +99,25 @@ class MzwikApiClient:
             raise MzwikApiError(f"Cannot reach eBOK: {err}") from err
 
     async def async_login(self, username: str, password: str) -> None:
-        """Log in and capture the account's context id (podmiotId)."""
-        await self._post(
-            "security/login",
-            {"username": username, "password": password, "captcha": ""},
-        )
+        """Log in and capture the account's context id (podmiotId).
+
+        Unlike the JSON data endpoints, the login is a form POST
+        (application/x-www-form-urlencoded) to /security/login?contextId=-1 and
+        replies with a 302 that sets the session cookie. The captcha field is
+        sent empty; the backend does not enforce it.
+        """
+        try:
+            async with self._session.post(
+                f"{BASE_URL}/security/login?contextId=-1",
+                data={"username": username, "password": password, "captcha": ""},
+                timeout=TIMEOUT,
+                allow_redirects=False,
+            ) as resp:
+                if resp.status not in (200, 302):
+                    raise MzwikApiError(f"HTTP {resp.status} from security/login")
+        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+            raise MzwikApiError(f"Cannot reach eBOK: {err}") from err
+
         try:
             async with self._session.get(
                 f"{BASE_URL}/security/getEbokUserFromSession", timeout=TIMEOUT
