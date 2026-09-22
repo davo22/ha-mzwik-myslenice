@@ -1,0 +1,41 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "description": "Zaloguj się do portalu eBOK MZWiK Myślenice (portal.mzwikmyslenice.com.pl).",
+        "data": {
+          "username": "Numer klienta",
+          "password": "Hasło"
+        }
+      },
+      "meters": {
+        "title": "Wodomierze",
+        "description": "Wybierz wodomierze, które chcesz śledzić.",
+        "data": {
+          "meters": "Wodomierze"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Błędny numer klienta lub hasło.",
+      "cannot_connect": "Nie można połączyć się z portalem eBOK.",
+      "no_meters": "Nie znaleziono wodomierzy na tym koncie."
+    },
+    "abort": {
+      "already_configured": "To konto jest już skonfigurowane."
+    }
+  },
+  "services": {
+    "import_history": {
+      "name": "Importuj historię zużycia",
+      "description": "Ponownie odczytuje wszystkie odczyty z eBOK i przebudowuje uśrednione dzienne statystyki zużycia."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "reading": { "name": "Stan wodomierza" },
+      "last_consumption": { "name": "Zużycie w ostatnim okresie" },
+      "daily_average": { "name": "Średnie zużycie dobowe" }
+    }
+  }
+}

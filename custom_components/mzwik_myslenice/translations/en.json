@@ -1,0 +1,41 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "description": "Log in to the MZWiK Myślenice eBOK portal (portal.mzwikmyslenice.com.pl).",
+        "data": {
+          "username": "Client number",
+          "password": "Password"
+        }
+      },
+      "meters": {
+        "title": "Water meters",
+        "description": "Choose which meters to track.",
+        "data": {
+          "meters": "Meters"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Wrong client number or password.",
+      "cannot_connect": "Cannot reach the eBOK portal.",
+      "no_meters": "No water meters found on this account."
+    },
+    "abort": {
+      "already_configured": "This account is already configured."
+    }
+  },
+  "services": {
+    "import_history": {
+      "name": "Import consumption history",
+      "description": "Re-reads all meter readings from eBOK and rebuilds the averaged daily consumption statistics."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "reading": { "name": "Meter reading" },
+      "last_consumption": { "name": "Last period consumption" },
+      "daily_average": { "name": "Average daily consumption" }
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "domain": "mzwik_myslenice",
+  "name": "MZWiK Myślenice (eBOK)",
+  "codeowners": ["@davo22"],
+  "config_flow": true,
+  "dependencies": ["recorder"],
+  "documentation": "https://github.com/davo22/ha-mzwik-myslenice",
+  "issue_tracker": "https://github.com/davo22/ha-mzwik-myslenice/issues",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "requirements": [],
+  "version": "1.0.0"
+}
