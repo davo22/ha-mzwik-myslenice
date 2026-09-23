@@ -10,6 +10,11 @@ from homeassistant.core import HomeAssistant, ServiceCall
 from .const import (
     CONF_IMPORT_VERSION,
     CONF_METERS,
+    CONF_SEWAGE_METERS,
+    CONF_SEWAGE_PRICE,
+    CONF_WATER_PRICE,
+    DEFAULT_SEWAGE_PRICE,
+    DEFAULT_WATER_PRICE,
     DOMAIN,
     IMPORT_VERSION,
     SERVICE_IMPORT_HISTORY,
@@ -34,6 +39,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: MzwikConfigEntry) -> boo
 
     _async_register_services(hass)
 
+    # Re-import (rebuilds cost statistics too) whenever prices/options change.
+    entry.async_on_unload(entry.add_update_listener(_async_options_updated))
+
     outdated = entry.data.get(CONF_IMPORT_VERSION) != IMPORT_VERSION
     needs_import = outdated
     if not needs_import:
@@ -57,8 +65,25 @@ async def async_unload_entry(hass: HomeAssistant, entry: MzwikConfigEntry) -> bo
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
+def _unit_price(entry: MzwikConfigEntry, zamont_id: str) -> float:
+    """PLN per m³ for one meter: water always, sewage only where it applies."""
+    opts = entry.options
+    water = float(opts.get(CONF_WATER_PRICE, DEFAULT_WATER_PRICE))
+    sewage = float(opts.get(CONF_SEWAGE_PRICE, DEFAULT_SEWAGE_PRICE))
+    # Default (no options set yet): charge sewage on every meter. Once the user
+    # configures sewage_meters, only the listed meters get sewage.
+    sewage_meters = opts.get(CONF_SEWAGE_METERS)
+    applies = sewage_meters is None or zamont_id in sewage_meters
+    return water + (sewage if applies else 0.0)
+
+
+async def _async_options_updated(hass: HomeAssistant, entry: MzwikConfigEntry) -> None:
+    """Rebuild statistics when prices/options change."""
+    await _async_import(hass, entry)
+
+
 async def _async_import(hass: HomeAssistant, entry: MzwikConfigEntry) -> None:
-    """Import averaged history for every configured meter."""
+    """Import averaged history (m³ and cost) for every configured meter."""
     coordinator = entry.runtime_data
     selected = entry.data.get(CONF_METERS, [])
     try:
@@ -72,7 +97,12 @@ async def _async_import(hass: HomeAssistant, entry: MzwikConfigEntry) -> None:
         if selected and meter.zamont_id not in selected:
             continue
         try:
-            total += await async_import_meter_history(hass, coordinator.client, meter)
+            total += await async_import_meter_history(
+                hass,
+                coordinator.client,
+                meter,
+                unit_price=_unit_price(entry, meter.zamont_id),
+            )
         except Exception:  # noqa: BLE001
             _LOGGER.exception("History import failed for meter %s", meter.serial)
 

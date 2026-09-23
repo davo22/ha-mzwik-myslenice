@@ -5,10 +5,19 @@ import logging
 from typing import Any
 
 import voluptuous as vol
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlow,
+)
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers.selector import (
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
     SelectOptionDict,
     SelectSelector,
     SelectSelectorConfig,
@@ -16,7 +25,17 @@ from homeassistant.helpers.selector import (
 )
 
 from .api import MzwikApiClient, MzwikApiError, MzwikAuthError, MzwikMeter
-from .const import CONF_METERS, DOMAIN
+from .const import (
+    CONF_METERS,
+    CONF_SEWAGE_METERS,
+    CONF_SEWAGE_PRICE,
+    CONF_WATER_PRICE,
+    DEFAULT_SEWAGE_PRICE,
+    DEFAULT_WATER_PRICE,
+    DOMAIN,
+)
+
+CONF_METER_LABELS = "meter_labels"
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -29,6 +48,11 @@ class MzwikConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle the MZWiK Myślenice config flow."""
 
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
+        return MzwikOptionsFlow()
 
     def __init__(self) -> None:
         self._username: str = ""
@@ -74,12 +98,17 @@ class MzwikConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Let the user pick which meters to track."""
         if user_input is not None:
+            labels = {
+                m.zamont_id: (f"{m.serial} — {m.address}" if m.address else m.serial)
+                for m in self._meters
+            }
             return self.async_create_entry(
                 title=f"MZWiK {self._username}",
                 data={
                     CONF_USERNAME: self._username,
                     CONF_PASSWORD: self._password,
                     CONF_METERS: user_input[CONF_METERS],
+                    CONF_METER_LABELS: labels,
                 },
             )
 
@@ -104,3 +133,44 @@ class MzwikConfigFlow(ConfigFlow, domain=DOMAIN):
             }
         )
         return self.async_show_form(step_id="meters", data_schema=schema)
+
+
+class MzwikOptionsFlow(OptionsFlow):
+    """Set water/sewage unit prices and which meters include sewage."""
+
+    async def async_step_init(self, user_input=None) -> ConfigFlowResult:
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        opts = self.config_entry.options
+        selected = self.config_entry.data.get(CONF_METERS, [])
+        labels = self.config_entry.data.get(CONF_METER_LABELS, {})
+        meter_options = [
+            SelectOptionDict(value=mid, label=labels.get(mid, mid)) for mid in selected
+        ]
+        price = NumberSelector(
+            NumberSelectorConfig(min=0, step=0.01, mode=NumberSelectorMode.BOX)
+        )
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_WATER_PRICE,
+                    default=opts.get(CONF_WATER_PRICE, DEFAULT_WATER_PRICE),
+                ): price,
+                vol.Required(
+                    CONF_SEWAGE_PRICE,
+                    default=opts.get(CONF_SEWAGE_PRICE, DEFAULT_SEWAGE_PRICE),
+                ): price,
+                vol.Optional(
+                    CONF_SEWAGE_METERS,
+                    default=opts.get(CONF_SEWAGE_METERS, selected),
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=meter_options,
+                        multiple=True,
+                        mode=SelectSelectorMode.LIST,
+                    )
+                ),
+            }
+        )
+        return self.async_show_form(step_id="init", data_schema=schema)

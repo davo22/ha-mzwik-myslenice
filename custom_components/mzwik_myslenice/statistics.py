@@ -36,8 +36,16 @@ _LOGGER = logging.getLogger(__name__)
 
 def statistic_id(meter: MzwikMeter) -> str:
     """External statistic id for one meter's consumption history."""
-    slug = "".join(c if c.isalnum() else "_" for c in meter.serial.lower())
-    return f"{DOMAIN}:water_{slug}"
+    return f"{DOMAIN}:water_{_slug(meter.serial)}"
+
+
+def cost_statistic_id(meter: MzwikMeter) -> str:
+    """External statistic id for one meter's cost history."""
+    return f"{DOMAIN}:cost_{_slug(meter.serial)}"
+
+
+def _slug(serial: str) -> str:
+    return "".join(c if c.isalnum() else "_" for c in serial.lower())
 
 
 async def async_has_history(hass: HomeAssistant, sid: str) -> bool:
@@ -47,23 +55,10 @@ async def async_has_history(hass: HomeAssistant, sid: str) -> bool:
     return bool(last.get(sid))
 
 
-async def async_import_meter_history(
-    hass: HomeAssistant, client: MzwikApiClient, meter: MzwikMeter
-) -> int:
-    """Import averaged daily consumption for one meter. Returns points written."""
-    try:
-        readings = await client.async_get_readings(meter.zamont_id, limit=500)
-    except MzwikApiError as err:
-        _LOGGER.warning("Cannot fetch readings for meter %s: %s", meter.serial, err)
-        return 0
-
-    # Portal returns newest first; we want chronological order to build periods.
+def _daily_consumption(readings: list) -> dict[datetime, float]:
+    """Spread each reading period's consumption evenly across its days."""
     readings = [r for r in readings if r.reading_date is not None]
     readings.sort(key=lambda r: r.reading_date)
-    if len(readings) < 2:
-        _LOGGER.info("Meter %s has too few readings to build history", meter.serial)
-        return 0
-
     daily: dict[datetime, float] = {}
     for prev, cur in zip(readings, readings[1:]):
         span = (cur.reading_date - prev.reading_date).days
@@ -76,29 +71,77 @@ async def async_import_meter_history(
                 datetime(day.year, day.month, day.day, tzinfo=dt_util.DEFAULT_TIME_ZONE)
             )
             daily[start] = per_day
+    return daily
 
-    if not daily:
-        return 0
 
+def _cumulative(daily: dict[datetime, float], factor: float = 1.0) -> list[StatisticData]:
     running = 0.0
     points: list[StatisticData] = []
     for start in sorted(daily):
-        running += daily[start]
-        points.append(StatisticData(start=start, state=daily[start], sum=running))
+        value = daily[start] * factor
+        running += value
+        points.append(StatisticData(start=start, state=value, sum=running))
+    return points
 
-    metadata = StatisticMetaData(
-        mean_type=StatisticMeanType.NONE,
-        has_sum=True,
-        name=f"Woda {meter.serial}",
-        source=DOMAIN,
-        statistic_id=statistic_id(meter),
-        unit_of_measurement="m³",
+
+async def async_import_meter_history(
+    hass: HomeAssistant,
+    client: MzwikApiClient,
+    meter: MzwikMeter,
+    *,
+    unit_price: float | None = None,
+) -> int:
+    """Import averaged daily consumption (and cost, if a price is given).
+
+    Returns the number of daily points written for the consumption statistic.
+    `unit_price` is PLN per m³ already summed for this meter (water, plus sewage
+    when it applies); when None or 0, no cost statistic is written.
+    """
+    try:
+        readings = await client.async_get_readings(meter.zamont_id, limit=500)
+    except MzwikApiError as err:
+        _LOGGER.warning("Cannot fetch readings for meter %s: %s", meter.serial, err)
+        return 0
+
+    daily = _daily_consumption(readings)
+    if not daily:
+        _LOGGER.info("Meter %s has too few readings to build history", meter.serial)
+        return 0
+
+    points = _cumulative(daily)
+    async_add_external_statistics(
+        hass,
+        StatisticMetaData(
+            mean_type=StatisticMeanType.NONE,
+            has_sum=True,
+            name=f"Woda {meter.serial}",
+            source=DOMAIN,
+            statistic_id=statistic_id(meter),
+            unit_of_measurement="m³",
+        ),
+        points,
     )
-    async_add_external_statistics(hass, metadata, points)
+
+    if unit_price:
+        cost_points = _cumulative(daily, factor=unit_price)
+        async_add_external_statistics(
+            hass,
+            StatisticMetaData(
+                mean_type=StatisticMeanType.NONE,
+                has_sum=True,
+                name=f"Woda {meter.serial} — koszt",
+                source=DOMAIN,
+                statistic_id=cost_statistic_id(meter),
+                unit_of_measurement="PLN",
+            ),
+            cost_points,
+        )
+
     _LOGGER.info(
-        "Imported %s daily points (%.2f m³) for meter %s",
+        "Imported %s daily points (%.2f m³%s) for meter %s",
         len(points),
-        running,
+        sum(daily.values()),
+        f", {sum(daily.values()) * unit_price:.2f} PLN" if unit_price else "",
         meter.serial,
     )
     return len(points)

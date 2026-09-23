@@ -25,10 +25,23 @@
       "already_configured": "This account is already configured."
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Water prices",
+        "description": "Unit prices in PLN per m³ (the portal does not expose them). Water is charged on every meter; pick which meters also include sewage (a garden meter is usually water-only).",
+        "data": {
+          "water_price": "Water price (PLN/m³)",
+          "sewage_price": "Sewage price (PLN/m³)",
+          "sewage_meters": "Meters that also include sewage"
+        }
+      }
+    }
+  },
   "services": {
     "import_history": {
       "name": "Import consumption history",
-      "description": "Re-reads all meter readings from eBOK and rebuilds the averaged daily consumption statistics."
+      "description": "Re-reads all meter readings from eBOK and rebuilds the averaged daily consumption and cost statistics."
     }
   },
   "entity": {

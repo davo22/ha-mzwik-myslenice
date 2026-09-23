@@ -58,6 +58,15 @@ physical meter swap — which resets the dial — does not corrupt the history.
 Re-run the backfill anytime with the `mzwik_myslenice.import_history` service; an
 update that changes the import also re-imports itself on the next restart.
 
+## Costs
+
+The portal exposes only invoice totals, not per-m³ prices, so unit prices are
+entered manually under the integration's **Configure** dialog (water price and
+sewage price in PLN/m³, plus which meters include sewage — a garden meter is
+usually water-only). A cost statistic (`mzwik_myslenice:cost_<serial>`) is then
+built per meter; attach it as the cost of the matching water source in the Energy
+dashboard. Changing the prices rebuilds the cost history automatically.
+
 ## Requirements
 
 Home Assistant 2025.8.0 or newer.
