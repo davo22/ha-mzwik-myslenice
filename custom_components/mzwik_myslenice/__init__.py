@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import Platform
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 
 from .const import (
@@ -87,6 +87,11 @@ async def _async_import(hass: HomeAssistant, entry: MzwikConfigEntry) -> None:
     coordinator = entry.runtime_data
     selected = entry.data.get(CONF_METERS, [])
     try:
+        # The portal session expires, so log in fresh before fetching rather
+        # than relying on whatever session the daily poll last left behind.
+        await coordinator.client.async_login(
+            entry.data[CONF_USERNAME], entry.data[CONF_PASSWORD]
+        )
         meters = await coordinator.client.async_get_meters()
     except Exception:  # noqa: BLE001 - background task must not die silently
         _LOGGER.exception("History import: cannot list meters")

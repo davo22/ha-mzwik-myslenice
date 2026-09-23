@@ -83,7 +83,7 @@ class MzwikApiClient:
         self._session = session
         self._context_id: int | None = None
 
-    async def _post(self, path: str, payload: dict, *, allow_redirect: bool = False):
+    async def _post(self, path: str, payload: dict):
         # Every authenticated data endpoint takes the account context as a URL
         # query param (?contextId=<podmiotId>) in addition to the JSON body;
         # omitting it makes the Spring backend return HTTP 400.
@@ -91,10 +91,12 @@ class MzwikApiClient:
         url = f"{BASE_URL}/{path}?contextId={ctx}"
         try:
             async with self._session.post(
-                url, json=payload, timeout=TIMEOUT, allow_redirects=allow_redirect
+                url, json=payload, timeout=TIMEOUT, allow_redirects=False
             ) as resp:
-                if resp.status in (301, 302) and allow_redirect is False:
-                    return None  # login success signals via redirect
+                # An expired session redirects to the login page instead of
+                # answering. Surface it rather than silently returning no data.
+                if resp.status in (301, 302):
+                    raise MzwikAuthError("Session expired")
                 if resp.status == 401:
                     raise MzwikAuthError("Not authenticated")
                 if resp.status != 200:
